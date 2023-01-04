@@ -75,7 +75,7 @@ for counter = 1:length(newFiles)
 end
 
 cd(rootdir);
-grandERP = nanmean(allERP,4); %ERP averaged across participants (4th dimension)
+grandERP = mean(allERP,4,'omitnan'); %ERP averaged across participants (4th dimension)
 
 
 %% Plot Data
