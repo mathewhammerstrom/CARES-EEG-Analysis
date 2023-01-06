@@ -1,3 +1,4 @@
+%% 
 clear all;
 close all;
 clc;
@@ -9,9 +10,11 @@ EXCEL.Properties.VariableNames = {'File','Output','Artifacts'};
 rootdir = uigetdir('','Select the Folder with all of your EEG folders in it'); %Where you want to read data from
 outputDir = uigetdir('','Select the Folder where you want analyzed data to go'); %Where you want the data to go
 
+reOrderList = {'sub-HC113_ses-S005_task-Default_run-001_eeg.xdf'};
+reOrderList{2} = {'sub-HC130_ses-S002_task-Default_run-001_eeg.xdf'};
 %% Pre-Processing Parameters
 nbEEGChan = 4;
-chanNames = {'Fp1','TP9','TP10','Fp2'};
+chanNames = {'Fp1','Fp2','TP9','TP10'};
 artifactParameter = 60;
 
 markers = {'S101', 'S102','S103'};
@@ -44,15 +47,19 @@ for counter = 1:length(newFiles)
     cd(pathName);
     
     [EEG] = doLoadCGX(pathName,fileName,nbEEGChan,chanNames,2,1,0); %Load in CGX data with set parameters
-    x = [];
-    
-%     [EEG] = doRemoveChannels(EEG, {'Fp1','Fp2'}, EEG.chanlocs);
-    
+      
     [EEG] = doFilter(EEG,2,15,2,60,EEG.srate); %Filter data, 2Hz to 30hz Bandpass 2nd order butterworth with 60Hz notch
-    
+    if isequal(fileName,reOrderList{1})
+        [EEG] = doReOrderCGX(EEG,fileName);
+    elseif isequal(fileName,reOrderList{2})
+        [EEG] = doReOrderCGX(EEG,fileName);
+    else
+        [EEG] = doRemoveChannels(EEG,{'Fp1','Fp2'},EEG.chanlocs);
+    end
+
     [EEG] = doSegmentData(EEG,markers,[-200, 1000]); %Segment data 200 ms before and 600 ms after stimulus
         
-    [EEG] = doIncreasePEERSNR(EEG,2); %Increase signal to noise ratio by concatenating Tp9, Tp10
+%     [EEG] = doIncreasePEERSNR(EEG,2); %Increase signal to noise ratio by concatenating Tp9, Tp10
 
     [EEG] = doBaseline(EEG,[-200,0]); %Baseline correction
     
@@ -82,18 +89,23 @@ grandERP = mean(allERP,4,'omitnan'); %ERP averaged across participants (4th dime
 collapsedERP = nanmean(allERP,4);
 collapsedERP = nanmean(collapsedERP,3);
 
-subplot(2,1,1);
+subplot(3,1,1);
 plot(ERP.times,grandERP(1,:,1),'LineWidth',3);
 hold on;
 plot(ERP.times,grandERP(1,:,2),'LineWidth',3);
 hold on;
 plot(ERP.times,grandERP(1,:,3),'LineWidth',3);
 hold on;
-% plot(ERP.times,collapsedERP(1,:),'k','LineWidth',3);
-title('Concatenated TP9 and TP10')
+subplot(3,1,2);
+plot(ERP.times,grandERP(2,:,1),'LineWidth',3);
+hold on;
+plot(ERP.times,grandERP(2,:,2),'LineWidth',3);
+hold on;
+plot(ERP.times,grandERP(2,:,3),'LineWidth',3);
+hold on;
 legend('Meth','Neutral','Negative','Collapsed')
 
-subplot(2,1,2);
+subplot(3,1,3);
 bar(artifacts);
 title('Artifact %s')
 
@@ -101,21 +113,30 @@ erpName =  ['ERP_AllParticipants'];
 save(fullfile(outputDir,erpName),'grandERP') %Write this data into the summary sheet
 
 %% Quantify %%
+for channel = 1:2
+    [tempMax, p3loc] = max(collapsedERP(channel,251:401)); %Find max in 300ms-600ms post Stimulus
+    timeRange = p3loc-25+251:p3loc+25+251; %Make a 50ms window around it
+    channelName = ERP.chanlocs(channel).labels;
 
-channel = 1;
-[tempMax, p3loc] = max(collapsedERP(channel,251:401)); %Find max in 300ms-600ms post Stimulus
-timeRange = [p3loc(channel)-25+251:p3loc(channel)+25+251]; %Make a 50ms window around it
-channelName = ERP.chanlocs(channel).labels;
-
-for participants = 1:size(allERP,4)
-    for conditions = 1:3
-        [p3Max(conditions)] = mean(allERP(channel,timeRange,conditions,participants),2); %FInd mean in our time range
-        fdata(participants, conditions) = p3Max(conditions); %Save for each condition into simple array
-        EXCEL(participants, conditions+3) = array2table(p3Max(conditions)); %Save for each condition into our table
+    for participants = 1:size(allERP,4)
+        if channel ==1
+            for conditions = 1:3
+                [p3Max(conditions)] = mean(allERP(channel,timeRange,conditions,participants),2); %FInd mean in our time range
+                fdata(participants, conditions) = p3Max(conditions); %Save for each condition into simple array
+                EXCEL(participants, conditions+3) = array2table(p3Max(conditions)); %Save for each condition into our table
+            end
+        else
+            for conditions = 1:3
+                [p3Max(conditions)] = mean(allERP(channel,timeRange,conditions,participants),2); %FInd mean in our time range
+                fdata(participants, conditions+3) = p3Max(conditions); %Save for each condition into simple array
+                EXCEL(participants, conditions+6) = array2table(p3Max(conditions)); %Save for each condition into our table
+            end
+        end
     end
 end
+EXCEL.Properties.VariableNames = {'File','Output','Artifacts','TP9-Meth','TP9-Neutral','TP9-Negative','TP10-Meth','TP10-Neutral','TP10-Negative'};
 
-outputName =  ['OUTPUT_AllParticipants'];
+outputName =  'OUTPUT_AllParticipants';
 save(fullfile(outputDir,outputName),'fdata') %Write this data into the summary sheet
 
 writetable(EXCEL,fullfile(outputDir,outputName)) %Write this data into the summary sheet
