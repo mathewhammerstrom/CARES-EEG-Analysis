@@ -86,8 +86,8 @@ grandERP = mean(allERP,4,'omitnan'); %ERP averaged across participants (4th dime
 
 
 %% Plot Data
-collapsedERP = nanmean(allERP,4);
-collapsedERP = nanmean(collapsedERP,3);
+collapsedERP = mean(allERP,4,'omitnan');
+collapsedERP = mean(collapsedERP,3,'omitnan');
 
 subplot(3,1,1);
 plot(ERP.times,grandERP(1,:,1),'LineWidth',3);
